@@ -1,0 +1,33 @@
+# Environment / secrets — NEVER commit these
+.env
+credentials.json
+token.json
+
+# Temporary processing files
+.tmp/
+
+# Outputs (generated files)
+outputs/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
