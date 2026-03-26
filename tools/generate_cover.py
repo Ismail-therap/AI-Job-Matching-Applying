@@ -21,6 +21,7 @@ import re
 import time
 
 import openai
+from tools import cost_tracker
 
 log = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ def generate(
     resume_plain: str,
     client: openai.OpenAI,
     default_template_path: str = "default_cover_letter.tex",
+    resume_tex: str = "",
 ) -> tuple[str, list[str]]:
     """
     Generate a tailored, concise cover letter .tex (single API call).
@@ -46,6 +48,7 @@ def generate(
         resume_plain:          Plain text resume for context.
         client:                Initialized OpenAI client.
         default_template_path: Path to fallback skeleton .tex file.
+        resume_tex:            Raw .tex source of the resume (for name extraction).
 
     Returns:
         (cover_tex_out, warnings)
@@ -70,10 +73,11 @@ def generate(
         )
 
     # Single API call — full body rewrite
-    body = _generate_body(company, role, jd_text, resume_plain, client)
+    body = _generate_body(company, role, jd_text, resume_plain, resume_tex, client)
     if body is None:
         warnings.append("Cover letter generation failed — using minimal fallback.")
-        body = _fallback_body(company, role)
+        candidate_name = _extract_candidate_name(resume_tex)
+        body = _fallback_body(company, role, candidate_name)
 
     result = preamble + "\n\\begin{document}\n\n" + body + "\n\n\\end{document}\n"
 
@@ -83,36 +87,161 @@ def generate(
     return result, warnings
 
 
-# ── Body generation ───────────────────────────────────────────────────────────
+# ── Body generation ────────────────────────────────────────────────────────────
+
+def _experience_guidance(role: str, jd_text: str) -> str:
+    """Return experience-selection rules based on the target role type."""
+    combined = (role + " " + jd_text[:500]).lower()
+
+    biostat_signals = [
+        "biostatistician", "biostatistical", "biostatistics",
+        "clinical statistician", "medical statistician", "health statistician",
+        "clinical data analyst", "epidemiologist", "pharmacostatistician",
+        "biometrics analyst", "clinical research analyst",
+    ]
+    ds_signals = [
+        "data scientist", "senior data scientist", "principal data scientist",
+        "machine learning engineer", "ml engineer", "ai engineer",
+    ]
+    analyst_signals = [
+        "institutional analyst", "institutional data analyst", "data analyst",
+        "research analyst", "business analyst", "analytics analyst",
+    ]
+
+    is_biostat = any(kw in combined for kw in biostat_signals)
+    is_ds      = any(kw in combined for kw in ds_signals)
+    is_analyst = any(kw in combined for kw in analyst_signals)
+
+    if is_biostat:
+        return (
+            "\n\nCRITICAL EXPERIENCE SELECTION RULE (must follow exactly):\n"
+            "- This is a biostatistician / medical analyst role.\n"
+            "- You MUST use the LSU Health Shreveport Biostatistician experience as the primary credibility anchor.\n"
+            "- You MUST NOT reference or mention the University of Wyoming position for this role.\n"
+            "- Build all biostatistics and clinical-analysis talking points from the LSU Health Shreveport role only."
+        )
+    elif is_ds:
+        return (
+            "\n\nCRITICAL EXPERIENCE SELECTION RULE (must follow exactly):\n"
+            "- This is a data scientist role.\n"
+            "- You MUST draw talking points from BOTH the University of Wyoming Data Analyst experience "
+            "AND the Insightin Senior Data Scientist experience.\n"
+            "- Use University of Wyoming to demonstrate analytical rigor and the Insightin role to "
+            "demonstrate advanced data science / ML capabilities."
+        )
+    elif is_analyst:
+        return (
+            "\n\nCRITICAL EXPERIENCE SELECTION RULE (must follow exactly):\n"
+            "- This is an institutional / data analyst role.\n"
+            "- You MUST use the University of Wyoming position as the primary credibility anchor.\n"
+            "- Do NOT emphasise biostatistics-specific experience; focus on institutional data analysis work."
+        )
+    return ""
+
+
+def _extract_candidate_name(resume_tex: str) -> str:
+    """Extract candidate name from the raw LaTeX resume source.
+
+    Handles the most common CV templates in order of specificity.
+    Returns empty string if no name can be reliably identified.
+    """
+    if not resume_tex:
+        return ""
+
+    # Jake Gutierrez / sb2nov template (most common GitHub/Overleaf CV):
+    # \textbf{\Huge \scshape Md. Ismail Hossain} or \textbf{\Huge Name}
+    m = re.search(
+        r"\\textbf\{\\Huge\s+(?:\\scshape\s+)?([A-Za-z][^}\\]*)\}",
+        resume_tex,
+    )
+    if m:
+        name = m.group(1).strip()
+        if 1 <= len(name.split()) <= 6:
+            return name
+
+    # moderncv: \name{Firstname}{Lastname}
+    m = re.search(r"\\name\{([^}]+)\}\{([^}]+)\}", resume_tex)
+    if m:
+        return f"{m.group(1).strip()} {m.group(2).strip()}"
+
+    # AltaCV / single-arg: \name{Full Name} or \cvname{Full Name}
+    for cmd in (r"\\name", r"\\cvname", r"\\Name"):
+        m = re.search(cmd + r"\{([^}]+)\}", resume_tex)
+        if m:
+            name = m.group(1).strip()
+            if 1 <= len(name.split()) <= 6:
+                return name
+
+    # Standard LaTeX: \author{Full Name}
+    m = re.search(r"\\author\{([^}]+)\}", resume_tex)
+    if m:
+        name = m.group(1).strip()
+        if 1 <= len(name.split()) <= 6:
+            return name
+
+    # {\Huge\textbf{Name}} or {\huge\textbf{Name}}
+    m = re.search(
+        r"\{\\(?:huge|Huge|LARGE|Large)\\textbf\{([A-Za-z][^}]*)\}\}",
+        resume_tex,
+    )
+    if m:
+        name = m.group(1).strip()
+        if 1 <= len(name.split()) <= 6:
+            return name
+
+    return ""
+
 
 def _generate_body(
     company: str,
     role: str,
     jd_text: str,
     resume_plain: str,
+    resume_tex: str,
     client: openai.OpenAI,
 ) -> str | None:
-    system = (
-        "You are a professional cover letter writer. "
-        "Write the body of a cover letter in LaTeX — concise, targeted, and fitting on ONE page.\n\n"
-        "Structure (exactly 3 paragraphs, each wrapped in \\noindent and separated by \\vspace{8pt}):\n"
-        "  Para 1 — Opening: state the role, express genuine interest, one specific reason you are a fit.\n"
-        "  Para 2 — Value: highlight 2–3 most relevant skills/experiences from the resume that match the JD. "
-        "Be specific, reference real achievements. No fluff.\n"
-        "  Para 3 — Closing: confident call-to-action, thank the reader, one sentence.\n\n"
-        "Rules:\n"
-        "- Output ONLY raw LaTeX for the document body (no \\documentclass, no \\begin{document}).\n"
-        "- Include a date line, salutation (Dear Hiring Manager,), and a sign-off (Sincerely, / [Your Name]).\n"
-        "- Use \\noindent before each paragraph. Separate blocks with \\vspace{8pt}.\n"
-        "- Do NOT use bullet points, lists, or tables.\n"
-        "- Keep total word count under 300 words.\n"
-        "- No markdown, no code fences, no explanation."
+    exp_rule = _experience_guidance(role, jd_text)
+    candidate_name = _extract_candidate_name(resume_tex)
+    name_instruction = (
+        f"- The sign-off name is: {candidate_name}. "
+        f"End the letter with: \\noindent Sincerely,\\\\[8pt]\\textbf{{{candidate_name}}}"
+        if candidate_name
+        else "- End with: \\noindent Sincerely,\\\\[8pt]\\textbf{{[Your Name]}}"
     )
+
+    system = (
+        "You are a senior professional writing a cover letter in first person on behalf of the candidate.\n\n"
+        "Structure (exactly 3 paragraphs, each wrapped in \\noindent, separated by \\vspace{8pt}):\n\n"
+        "  Para 1 — Opening: name the role, express genuine interest, and state one specific reason "
+        "this candidate is a strong fit — grounded in a real credential or achievement.\n\n"
+        "  Para 2 — Strength narrative: Write 3–4 sentences that naturally showcase the candidate's "
+        "most relevant capabilities and accomplishments. Internally, use the job description to know "
+        "what matters most to this employer — but do NOT quote, list, or echo job requirements. "
+        "Instead, write confident prose about what the candidate has actually done, using concrete "
+        "details (tools, outcomes, scale, impact). Let the achievements demonstrate fit implicitly. "
+        "The reader should feel 'this person can do exactly what we need' without being told so.\n\n"
+        "  Para 3 — Closing: one confident sentence inviting next steps, thank the reader.\n\n"
+        "Formatting rules:\n"
+        "- Output ONLY raw LaTeX for the document body (no \\documentclass, no \\begin{document}).\n"
+        "- Start with a date line (\\noindent\\today), then \\vspace{12pt}, then salutation "
+        "(\\noindent Dear Hiring Manager,).\n"
+        "- Use \\noindent before each paragraph. Separate blocks with \\vspace{8pt}.\n"
+        f"- {name_instruction}\n"
+        "- Do NOT use bullet points, lists, or tables.\n"
+        "- Keep total word count under 320 words.\n"
+        "- CRITICAL: escape all LaTeX special characters in plain text — "
+        "dollar amounts must use \\$ (e.g. \\$20,000 not $20,000), "
+        "percent must use \\%, ampersand must use \\&, "
+        "hash must use \\#. Unescaped $ will break the PDF.\n"
+        "- No markdown, no code fences, no explanation — output LaTeX only."
+        + exp_rule
+    )
+
     user = (
         f"Company: {company}\n"
         f"Role: {role}\n\n"
         f"Job Description:\n{jd_text[:2500]}\n\n"
-        f"Candidate Resume (plain text):\n{resume_plain[:1500]}\n\n"
+        f"Candidate Resume (plain text):\n{resume_plain[:2500]}\n\n"
         "Write the cover letter body now."
     )
 
@@ -121,15 +250,17 @@ def _generate_body(
             resp = client.chat.completions.create(
                 model=MODEL,
                 temperature=TEMPERATURE,
-                max_tokens=700,
+                max_tokens=800,
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
             )
+            cost_tracker.record(MODEL, resp.usage.prompt_tokens, resp.usage.completion_tokens, "Cover letter")
             body = (resp.choices[0].message.content or "").strip()
             body = re.sub(r"^```[a-z]*\n?", "", body, flags=re.MULTILINE)
             body = re.sub(r"\n?```$", "", body).strip()
+            body = _sanitize_body(body)
             log.info("Cover letter body generated.")
             return body
         except openai.RateLimitError:
@@ -142,9 +273,29 @@ def _generate_body(
     return None
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _sanitize_body(body: str) -> str:
+    """Fix unescaped LaTeX special characters in generated body text.
+
+    Only fixes characters that appear in plain-text contexts (not inside
+    existing LaTeX commands or math environments).
+    """
+    # Escape bare $ that are NOT already preceded by a backslash
+    # (catches $20,000 → \$20,000 while leaving \$ and math \(...\) alone)
+    body = re.sub(r"(?<!\\)\$(?![^$]*\$)", r"\\$", body)
+
+    # Escape bare % not already escaped (common in "reduced costs by 20%")
+    body = re.sub(r"(?<!\\)%", r"\\%", body)
+
+    # Escape bare & not already escaped and not inside tabular/align
+    body = re.sub(r"(?<!\\)&", r"\\&", body)
+
+    return body
+
 
 _RESUME_CLASSES = ("moderncv", "resume", "twentysecondscv", "altacv", "awesome-cv")
+
 
 def _extract_preamble(tex: str | None) -> str:
     """Extract everything before \\begin{document} from a .tex string.
@@ -159,7 +310,6 @@ def _extract_preamble(tex: str | None) -> str:
     if not match:
         return ""
     preamble = tex[: match.start()].rstrip()
-    # Reject resume document classes — fall back to minimal preamble
     if any(cls in preamble for cls in _RESUME_CLASSES):
         log.info("Cover letter template uses a resume document class — using minimal preamble instead.")
         return ""
@@ -170,7 +320,8 @@ def _is_valid_latex(tex: str) -> bool:
     return r"\begin{document}" in tex and r"\end{document}" in tex
 
 
-def _fallback_body(company: str, role: str) -> str:
+def _fallback_body(company: str, role: str, candidate_name: str = "") -> str:
+    sign_off_name = candidate_name if candidate_name else "[Your Name]"
     return (
         f"\\noindent\\today\n\n"
         f"\\vspace{{12pt}}\n"
@@ -189,7 +340,7 @@ def _fallback_body(company: str, role: str) -> str:
         f"I look forward to the opportunity to discuss how I can contribute to your team.\n\n"
         f"\\vspace{{16pt}}\n"
         f"\\noindent Sincerely,\\\\[8pt]\n"
-        f"\\textbf{{[Your Name]}}"
+        f"\\textbf{{{sign_off_name}}}"
     )
 
 

@@ -31,6 +31,7 @@ from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).parent))
 
 import tools.compile_pdf as compile_pdf
+import tools.cost_tracker as cost_tracker
 import tools.extract_meta as extract_meta
 import tools.generate_cover as generate_cover
 import tools.parse_jd as parse_jd
@@ -390,15 +391,34 @@ def _show_results(client):
     # ── Keyword placement ──────────────────────────────────────────────────────
     sections = st.session_state.resume_sections
     if sections and missing:
-        st.markdown("#### 📌 Keyword Placement")
+        st.markdown(
+            """
+            <div style="background:#fffbeb;border:2px solid #f59e0b;border-radius:8px;padding:16px 20px;margin-bottom:12px">
+            <span style="font-size:1.1em;font-weight:700;color:#92400e">
+            ⚠️ Step required before applying — choose where to insert missing keywords
+            </span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         section_labels = []
         for _, name, lvl in sections:
             prefix = "  └ " if lvl == "subsection" else ""
             section_labels.append(f"{prefix}{name}")
 
+        # Smart default: prefer a Skills / Technical section, fall back to index 0
+        skill_keywords = ("skill", "technical", "competenc", "tool", "method", "software")
+        default_idx = next(
+            (i for i, (_, n, _) in enumerate(sections)
+             if any(k in n.lower() for k in skill_keywords)),
+            0,
+        )
+
         sel_idx = st.selectbox(
-            "Insert keywords into section:",
+            "📌 Insert keywords into section:",
             range(len(sections)),
+            index=default_idx,
             format_func=lambda i: section_labels[i],
             key="kw_section_idx",
         )
@@ -413,9 +433,8 @@ def _show_results(client):
             label_visibility="collapsed",
         )
         if selected_kws:
-            st.caption(
-                f"Will insert {len(selected_kws)} keyword(s) as **Applied Research Terms** "
-                f"subsection in **{sel_name}**."
+            st.success(
+                f"✅ {len(selected_kws)} keyword(s) will be inserted into **{sel_name}**."
             )
         else:
             st.warning("No keywords selected — keyword injection will be skipped.")
@@ -435,6 +454,7 @@ def _show_results(client):
 # ── Application package ────────────────────────────────────────────────────────
 
 def _run_package(client):
+    cost_tracker.reset()
     meta         = st.session_state.meta
     safe_company = meta.get("safe_company") or re.sub(
         r"[^\w]", "_", meta.get("company_name", "Unknown")
@@ -509,6 +529,7 @@ def _run_package(client):
                 resume_plain=st.session_state.resume_plain,
                 client=client,
                 default_template_path="default_cover_letter.tex",
+                resume_tex=st.session_state.resume_tex,
             )
             warnings.extend(cover_warn)
             mode = "your template" if st.session_state.cover_tex else "default template"
@@ -574,6 +595,7 @@ def _run_package(client):
 
     st.session_state.output_paths    = output_paths
     st.session_state.output_warnings = warnings
+    st.session_state.cost_summary    = cost_tracker.get_summary()
     st.session_state.package_done    = True
     st.rerun()
 
@@ -619,6 +641,28 @@ def _show_package_results():
         with st.expander(f"⚠️ {len(warnings)} warning(s)"):
             for w in warnings:
                 st.warning(w)
+
+    # ── Cost summary ───────────────────────────────────────────────────────────
+    cs = st.session_state.get("cost_summary")
+    if cs and cs["total_tokens"] > 0:
+        with st.expander(f"💰 API cost this run — ${cs['total_cost_usd']:.4f}"):
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total tokens", f"{cs['total_tokens']:,}")
+            c2.metric("Prompt tokens", f"{cs['total_prompt']:,}")
+            c3.metric("Output tokens", f"{cs['total_completion']:,}")
+            st.markdown("**Breakdown by step:**")
+            rows = ""
+            for call in cs["calls"]:
+                rows += (
+                    f"| {call.label} | {call.model} | "
+                    f"{call.prompt_tokens:,} | {call.completion_tokens:,} | "
+                    f"${call.total_cost:.4f} |\n"
+                )
+            st.markdown(
+                "| Step | Model | Prompt tokens | Output tokens | Cost |\n"
+                "|---|---|---|---|---|\n" + rows
+            )
+            st.caption("Prices: gpt-4o $2.50/M input · $10.00/M output")
 
     st.divider()
     st.markdown("#### Analyze another job?")

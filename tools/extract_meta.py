@@ -12,6 +12,7 @@ import os
 import re
 
 import openai
+from tools import cost_tracker
 
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 
@@ -46,6 +47,7 @@ def extract(jd_text: str, client: openai.OpenAI) -> dict:
             max_tokens=100,
             messages=[{"role": "user", "content": prompt}],
         )
+        cost_tracker.record(MODEL, resp.usage.prompt_tokens, resp.usage.completion_tokens, "Extract meta")
         raw = (resp.choices[0].message.content or "").strip()
         raw = re.sub(r"^```[a-z]*\n?", "", raw, flags=re.MULTILINE)
         raw = re.sub(r"\n?```$", "", raw).strip()

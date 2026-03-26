@@ -1,0 +1,185 @@
+%-------------------------
+% Resume in Latex
+% Author : Jake Gutierrez
+% Based off of: https://github.com/sb2nov/resume
+% License : MIT
+%------------------------
+
+\documentclass[letterpaper,10.9pt]{article}
+
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\input{glyphtounicode}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% Adjust margins
+\addtolength{\oddsidemargin}{-0.5in}
+\addtolength{\evensidemargin}{-0.5in}
+\addtolength{\textwidth}{1in}
+\addtolength{\topmargin}{-.65in}
+\addtolength{\textheight}{1.3in}
+
+\urlstyle{same}
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+% Sections formatting
+\titleformat{\section}{
+  \vspace{-4pt}\scshape\raggedright\large
+}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
+
+\pdfgentounicode=1
+
+%-------------------------
+% Custom commands
+\newcommand{\resumeItem}[1]{
+  \item\small{
+    {#1 \vspace{-5pt}}
+  }
+}
+
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-1pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\
+      \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeProjectHeading}[2]{
+    \item
+    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+      \small#1 & #2 \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-5pt}}
+\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
+
+%-------------------------------------------
+\begin{document}
+
+\begin{center}
+    \textbf{\Huge \scshape Md. Ismail Hossain} \\ \vspace{2pt}
+    \small (575)-551-8706 $|$
+    \href{mailto:statistician71@gmail.com}{statistician71@gmail.com} $|$
+    \href{https://www.linkedin.com/in/md-ismail-hossain-71b46482/}{linkedin.com/in/md-ismail-hossain} $|$
+    \href{https://github.com/Ismail-therap}{github.com/Ismail-therap}
+\end{center}
+\vspace{-4pt}
+
+\textbf{Data Scientist} with dual MS degrees in Applied Statistics and Applied Mathematics and 8+ years of experience building machine learning models, NLP pipelines, and AI-driven solutions across healthcare, biomedical research, and industry. Co-authored 8+ peer-reviewed publications (2024--2025), including a lead role on a \textit{Nature Mental Health} study, applying advanced ML and statistical methods to large-scale clinical data. Actively building agentic AI and LLM-based applications (LangChain, OpenAI APIs); completing Stanford School of Medicine's \textit{AI in Healthcare} (Coursera).
+\vspace{-4pt}
+
+%-----------EXPERIENCE-----------
+\section{Experience}
+  \resumeSubHeadingListStart
+
+  \resumeSubheading
+      {Data Scientist / Analyst}{Dec 2024 -- Nov 2025}
+      {University of Wyoming}{Laramie, Wyoming}
+      \resumeItemListStart
+        \resumeItem{Applied Prophet time series modeling to 5+ years of indirect cost data for revenue forecasting; used regression modeling to benchmark institutional R\&D performance nationally.}
+        \resumeItem{Built automated R and Python reporting pipelines; designed interactive Power BI dashboards integrating multi-source institutional datasets.}
+      \resumeItemListEnd
+
+  \resumeSubheading
+      {Biostatistician / ML Researcher}{Sep 2023 -- Nov 2024}
+      {Louisiana State University Health Shreveport}{Shreveport, Louisiana}
+      \resumeItemListStart
+        \resumeItem{Applied ML-based biomarker identification and advanced statistical models to clinical datasets; lead analyst on a \textbf{Nature Mental Health} publication and 8+ peer-reviewed studies.}
+        \resumeItem{Developed a bioinformatics metabolomics pipeline leveraging ML-based feature selection, reducing analysis costs by \$20,000 per dataset.}
+        \resumeItem{Utilized large-scale national datasets (NHANES, NIS, HCUP) for population-level ML and survival analysis across addiction and cardiovascular research.}
+      \resumeItemListEnd
+
+  \resumeSubheading
+      {Graduate Research \& Teaching Assistant}{Aug 2021 -- July 2023}
+      {New Mexico Institute of Mining and Technology}{Socorro, New Mexico}
+      \resumeItemListStart
+        \resumeItem{Conducted independent research in statistical modeling and operations research; developed and tested ML models as part of MS Mathematics thesis work.}
+        \resumeItem{Assisted in teaching graduate-level statistics and mathematics; supported course design and student mentoring.}
+      \resumeItemListEnd
+
+  \resumeSubheading
+      {Senior Data Scientist}{Dec 2018 -- Jul 2021}
+      {Insightin Technology Bangladesh Ltd.}{Dhaka, Bangladesh}
+      \resumeItemListStart
+        \resumeItem{Engineered an automated Python data quality pipeline for $\sim$20GB datasets, achieving a 12$\times$ runtime speedup (3 hrs $\rightarrow$ 15 min) with automated PDF reporting.}
+        \resumeItem{Built and deployed NLP sentiment analysis models on large-scale customer review data, contributing to a 5\% revenue increase by surfacing actionable dissatisfaction signals.}
+        \resumeItem{Led R\&D of new data analytics products; explored deep learning architectures for text classification tasks.}
+      \resumeItemListEnd
+
+  \resumeSubheading
+      {Early Career Data Roles}{2016 -- 2018}
+      {Innovision Consulting \& Therap BD}{Dhaka, Bangladesh}
+      \resumeItemListStart
+        \resumeItem{Data management in R and SurveyCTO; SQL analysis; BI dashboard QA and real-time Power BI survey monitoring.}
+      \resumeItemListEnd
+
+  \resumeSubHeadingListEnd
+
+%-----------FREELANCE-----------
+\section{Freelance Consulting}
+  \resumeSubHeadingListStart
+    \resumeSubheading
+      {Statistical Consultant (Upwork / PeoplePerHour)}{July 2013 -- July 2021}
+      {ML modeling, statistical analysis, and data science solutions for 193 international clients}{Remote}
+  \resumeSubHeadingListEnd
+
+%-----------EDUCATION-----------
+\section{Education}
+  \resumeSubHeadingListStart
+    \resumeSubheading
+      {New Mexico Institute of Mining and Technology}{Socorro, NM}
+      {MS Mathematics (Operations Research \& Statistics)}{July 2023}
+    \resumeSubheading
+      {University of Dhaka}{Dhaka, Bangladesh}
+      {MS Applied Statistics $|$ BS Applied Statistics}{Dec 2015 $|$ Dec 2013}
+  \resumeSubHeadingListEnd
+
+%-----------PROJECTS-----------
+\section{Selected Projects}
+    \resumeSubHeadingListStart
+\resumeProjectHeading
+{\textbf{Intrusion Detection in Industry 4.0 using ML} {(2023)}}{}
+\resumeItemListStart
+  \resumeItem{Trained Random Forest, SVM, and unsupervised models (K-means, SOM) on IoT telemetry data; Random Forest achieved 99.4\% accuracy -- published as a preprint (Authorea, 2023).}
+\resumeItemListEnd
+\resumeProjectHeading
+{\textbf{NLP: Sentiment Prediction on Customer Reviews} {(2022)}}{}
+\resumeItemListStart
+  \resumeItem{Compared LSTM, CNN, and CNN+LSTM in Python for multi-class sentiment classification; CNN achieved 91.5\% (binary) and CNN+LSTM 73.4\% (3-class).}
+  \resumeItem{Designed an interactive Power BI dashboard to visualize sentiment trends and model outputs, enabling non-technical stakeholders to act on customer insights directly.}
+\resumeItemListEnd
+    \resumeSubHeadingListEnd
+
+%-----------SKILLS-----------
+\section{Skills}
+ \begin{itemize}[leftmargin=0.15in, label={}]
+    \small{\item{
+    \textbf{ML \& AI}{: Scikit-learn, TensorFlow, PyTorch, LSTM, CNN, Random Forest, XGBoost, LangChain, OpenAI API, HuggingFace, AzureML.}\\
+    \textbf{Data \& Engineering}{: Python, R, SQL, PySpark, AWS, Azure Blob Storage, Google Colab, Git.}\\
+    \textbf{Methods}{: NLP, Deep Learning, Survival Analysis, Bayesian Methods, TMLE, Propensity Score Matching, Time Series, Causal Inference.}
+    }}
+ \end{itemize}
+
+\end{document}

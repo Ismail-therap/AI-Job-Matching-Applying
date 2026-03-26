@@ -26,6 +26,7 @@ import re
 import time
 
 import openai
+from tools import cost_tracker
 
 log = logging.getLogger(__name__)
 
@@ -189,6 +190,7 @@ def _pick_best_section(sections: list[tuple[int, str]], client: openai.OpenAI) -
                 {"role": "user", "content": prompt},
             ],
         )
+        cost_tracker.record(MODEL, resp.usage.prompt_tokens, resp.usage.completion_tokens, "Section picker")
         raw = (resp.choices[0].message.content or "").strip()
         idx = int(re.search(r"\d+", raw).group()) - 1
         idx = max(0, min(idx, len(sections) - 1))
@@ -401,6 +403,7 @@ def tailor(
                         {"role": "user", "content": user},
                     ],
                 )
+                cost_tracker.record(MODEL, resp.usage.prompt_tokens, resp.usage.completion_tokens, "Resume tailor")
                 raw = (resp.choices[0].message.content or "").strip()
                 raw = re.sub(r"^```[a-z]*\n?", "", raw, flags=re.MULTILINE)
                 raw = re.sub(r"\n?```$", "", raw).strip()

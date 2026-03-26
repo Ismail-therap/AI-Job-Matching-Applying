@@ -22,6 +22,7 @@ import os
 import re
 
 import openai
+from tools import cost_tracker
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -145,6 +146,7 @@ def _score_skills(
             max_tokens=300,
             messages=[{"role": "user", "content": prompt}],
         )
+        cost_tracker.record(MODEL, resp.usage.prompt_tokens, resp.usage.completion_tokens, "Skills extraction")
         raw = (resp.choices[0].message.content or "").strip()
         raw = re.sub(r"^```[a-z]*\n?", "", raw, flags=re.MULTILINE)
         raw = re.sub(r"\n?```$", "", raw).strip()
@@ -282,6 +284,7 @@ def _openai_extract_years(jd_text: str, client: openai.OpenAI) -> int | None:
             max_tokens=10,
             messages=[{"role": "user", "content": prompt}],
         )
+        cost_tracker.record(MODEL, resp.usage.prompt_tokens, resp.usage.completion_tokens, "Years extraction")
         val = (resp.choices[0].message.content or "").strip().lower()
         if val in ("null", "none"):
             return None
