@@ -399,16 +399,17 @@ def _is_streamlit_cloud() -> bool:
 
 
 def _output_folder(safe_company: str) -> Path | None:
-    """Return the local output folder, or None if no local save path is configured."""
-    custom = st.session_state.get("local_save_path", "").strip()
+    """Return the local output folder, or None on web deployment."""
     if _is_streamlit_cloud():
-        return None  # web deployment — no local filesystem access for users
-    base = Path(custom) if custom else Path("outputs")
+        return None
+    custom = st.session_state.get("local_save_path", "").strip()
+    base = Path(custom) if custom else Path(__file__).parent / "outputs"
     folder = base / datetime.now().strftime("%Y-%m-%d") / safe_company
     try:
         folder.mkdir(parents=True, exist_ok=True)
         return folder
-    except Exception:
+    except Exception as e:
+        st.warning(f"Could not create output folder `{folder}`: {e}\n\nFiles will be available via download buttons only.")
         return None
 
 
@@ -762,14 +763,12 @@ def _show_results(client):
 
         col_path, col_browse = st.columns([5, 1])
         with col_path:
-            typed = st.text_input(
+            st.text_input(
                 "Output folder path",
-                value=st.session_state.get("local_save_path", ""),
                 placeholder="Leave blank to use outputs/ inside the app folder",
                 label_visibility="collapsed",
-                key="local_save_path_input",
+                key="local_save_path",
             )
-            st.session_state["local_save_path"] = typed
         with col_browse:
             if st.button("Browse", use_container_width=True, key="btn_browse_folder"):
                 try:
@@ -781,13 +780,13 @@ def _show_results(client):
                     chosen = filedialog.askdirectory(title="Select output folder")
                     root.destroy()
                     if chosen:
-                        st.session_state["local_save_path"] = chosen
+                        st.session_state["local_save_path"] = chosen.replace("\\", "/")
                         st.rerun()
-                except Exception:
-                    st.warning("Browse not available — type the path manually.")
+                except Exception as e:
+                    st.warning(f"Browse failed: {e} — type the path manually.")
 
         current = st.session_state.get("local_save_path", "").strip()
-        preview = current if current else str(Path("outputs").resolve())
+        preview = current if current else str(Path(__file__).parent / "outputs")
         st.markdown(
             f'<p style="font-size:0.78rem;color:#64748b;margin:6px 0 0">Save location: <code>{preview}/YYYY-MM-DD/CompanyName/</code></p>',
             unsafe_allow_html=True,
