@@ -4,11 +4,13 @@ JobMatchingApp — Single Unified App
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import os
 import re
 import sys
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -920,11 +922,13 @@ def _run_package(client):
         output_paths = {}
         folder = _output_folder(safe_company)
 
-        # Always keep bytes for download buttons
+        # Always keep bytes for download buttons / ZIP
         if resume_pdf_bytes:
             output_paths["resume_pdf_bytes"] = resume_pdf_bytes
         if cover_pdf_bytes:
             output_paths["cover_pdf_bytes"] = cover_pdf_bytes
+        output_paths["resume_tex"] = tailored_tex
+        output_paths["cover_tex"]  = cover_tex_out
 
         pdf_count = (1 if resume_pdf_bytes else 0) + (1 if cover_pdf_bytes else 0)
 
@@ -999,59 +1003,89 @@ def _refine_cover(client):
 
 # ── Download results panel ──────────────────────────────────────────────────────
 
+def _build_zip(paths: dict, safe_company: str) -> bytes:
+    """Bundle all output files into a ZIP (files at root, no date subfolder)."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        if "resume_pdf_bytes" in paths:
+            zf.writestr("Resume.pdf", paths["resume_pdf_bytes"])
+        if "cover_pdf_bytes" in paths:
+            zf.writestr("CoverLetter.pdf", paths["cover_pdf_bytes"])
+        if "resume_tex" in paths:
+            zf.writestr("Resume.tex", paths["resume_tex"])
+        if "cover_tex" in paths:
+            zf.writestr("CoverLetter.tex", paths["cover_tex"])
+    return buf.getvalue()
+
+
 def _show_package_results(client):
-    paths    = st.session_state.output_paths
-    warnings = st.session_state.output_warnings
-    folder   = paths.get("folder", "")
+    paths       = st.session_state.output_paths
+    warnings    = st.session_state.output_warnings
+    folder      = paths.get("folder", "")
+    safe_company = st.session_state.meta.get("safe_company", "Company")
 
     st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
 
-    # Download cards
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown('<div class="card-title"><span class="card-title-dot"></span>Download Your Application</div>',
                 unsafe_allow_html=True)
-    if folder:
-        st.markdown(f'<p style="font-size:0.8rem;color:#64748b;margin:0 0 14px">Saved to: <code>{folder}</code></p>',
-                    unsafe_allow_html=True)
 
-    col_r, col_c = st.columns(2)
-    with col_r:
-        st.markdown("""<div class="dl-card">
-            <div class="dl-card-icon">📄</div>
-            <div class="dl-card-title">Tailored Resume</div>
-            <div class="dl-card-sub">Keywords injected · PDF</div>
-        </div>""", unsafe_allow_html=True)
-        st.write("")
-        if "resume_pdf_bytes" in paths:
-            st.download_button(
-                "⬇️  Download Resume (PDF)",
-                data=paths["resume_pdf_bytes"],
-                file_name="Resume.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-                type="primary",
-            )
-        else:
-            st.error("Resume PDF failed — .tex source saved.")
+    if _is_streamlit_cloud():
+        # ── Web: single ZIP download ─────────────────────────────────────────
+        zip_bytes = _build_zip(paths, safe_company)
+        st.download_button(
+            f"⬇️  Download {safe_company}.zip (Resume + Cover Letter)",
+            data=zip_bytes,
+            file_name=f"{safe_company}.zip",
+            mime="application/zip",
+            use_container_width=True,
+            type="primary",
+        )
+        st.caption("ZIP contains: Resume.pdf · CoverLetter.pdf · Resume.tex · CoverLetter.tex")
+    else:
+        # ── Local: individual download buttons + saved path ──────────────────
+        if folder:
+            st.markdown(f'<p style="font-size:0.8rem;color:#64748b;margin:0 0 14px">Saved to: <code>{folder}</code></p>',
+                        unsafe_allow_html=True)
 
-    with col_c:
-        st.markdown("""<div class="dl-card">
-            <div class="dl-card-icon">✉️</div>
-            <div class="dl-card-title">Cover Letter</div>
-            <div class="dl-card-sub">AI-tailored · PDF</div>
-        </div>""", unsafe_allow_html=True)
-        st.write("")
-        if "cover_pdf_bytes" in paths:
-            st.download_button(
-                "⬇️  Download Cover Letter (PDF)",
-                data=paths["cover_pdf_bytes"],
-                file_name="CoverLetter.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-                type="primary",
-            )
-        else:
-            st.error("Cover letter PDF failed — .tex source saved.")
+        col_r, col_c = st.columns(2)
+        with col_r:
+            st.markdown("""<div class="dl-card">
+                <div class="dl-card-icon">📄</div>
+                <div class="dl-card-title">Tailored Resume</div>
+                <div class="dl-card-sub">Keywords injected · PDF</div>
+            </div>""", unsafe_allow_html=True)
+            st.write("")
+            if "resume_pdf_bytes" in paths:
+                st.download_button(
+                    "⬇️  Download Resume (PDF)",
+                    data=paths["resume_pdf_bytes"],
+                    file_name="Resume.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    type="primary",
+                )
+            else:
+                st.error("Resume PDF failed — .tex source saved.")
+
+        with col_c:
+            st.markdown("""<div class="dl-card">
+                <div class="dl-card-icon">✉️</div>
+                <div class="dl-card-title">Cover Letter</div>
+                <div class="dl-card-sub">AI-tailored · PDF</div>
+            </div>""", unsafe_allow_html=True)
+            st.write("")
+            if "cover_pdf_bytes" in paths:
+                st.download_button(
+                    "⬇️  Download Cover Letter (PDF)",
+                    data=paths["cover_pdf_bytes"],
+                    file_name="CoverLetter.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    type="primary",
+                )
+            else:
+                st.error("Cover letter PDF failed — .tex source saved.")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
