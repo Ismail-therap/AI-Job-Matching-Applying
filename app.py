@@ -763,12 +763,13 @@ def _show_results(client):
 
         col_path, col_browse = st.columns([5, 1])
         with col_path:
-            st.text_input(
+            typed = st.text_input(
                 "Output folder path",
+                value=st.session_state.get("local_save_path", ""),
                 placeholder="Leave blank to use outputs/ inside the app folder",
                 label_visibility="collapsed",
-                key="local_save_path",
             )
+            st.session_state["local_save_path"] = typed
         with col_browse:
             if st.button("Browse", use_container_width=True, key="btn_browse_folder"):
                 try:
