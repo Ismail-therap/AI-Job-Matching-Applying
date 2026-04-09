@@ -32,7 +32,9 @@ An AI-powered job application assistant built with Streamlit. Upload your resume
 ## Requirements
 
 - Python 3.10+
-- [MiKTeX](https://miktex.org/download) installed and `pdflatex` on your system PATH (for PDF compilation)
+- **PDF compilation** — one of:
+  - **Local (Windows):** [MiKTeX](https://miktex.org/download) installed with `pdflatex` on your PATH
+  - **Streamlit Cloud (Linux):** handled automatically via `packages.txt` (TeX Live)
 - An [OpenAI API key](https://platform.openai.com/api-keys)
 
 ---
@@ -101,6 +103,13 @@ Click **Analyze Job Match**. The right panel shows:
 - Choose which CV section to inject keywords into
 - Deselect any keywords you don't want added
 
+### Step 5b — Set output folder *(local use only)*
+A folder picker card appears above the Generate button:
+- Click **Browse** to open a native folder dialog, or type a path directly
+- The app creates `<your-folder>/YYYY-MM-DD/CompanyName/` automatically
+- Leave blank to default to `outputs/` inside the app folder
+- Not shown when running on Streamlit Cloud (use download buttons instead)
+
 ### Step 6 — Apply
 Click **Apply — Generate Tailored CV + Cover Letter**. The app will:
 1. Inject selected keywords into your CV
@@ -111,7 +120,7 @@ Click **Apply — Generate Tailored CV + Cover Letter**. The app will:
 ### Step 7 — Download
 Download your **CV (PDF)** and **Cover Letter (PDF)** directly from the browser.
 
-Files are also saved locally to `outputs/YYYY-MM-DD/{Company}/`.
+**Local:** Files are also saved to your chosen folder as `YYYY-MM-DD/CompanyName/Resume.pdf` etc.
 
 ### Step 8 — Analyze another job
 Click **Analyze New Job** — your resume stays loaded, just paste a new JD.
@@ -153,6 +162,21 @@ JobMatchingApp/
 
 ---
 
+## Deploying to Streamlit Cloud
+
+1. Push your repo to GitHub
+2. Go to [share.streamlit.io](https://share.streamlit.io) and sign in with GitHub
+3. Click **New app** → select your repo, branch `main`, file `app.py`
+4. Under **Advanced settings → Secrets**, add:
+   ```toml
+   OPENAI_API_KEY = "sk-your-key-here"
+   ```
+5. Click **Deploy** — you'll get a public URL in ~3-5 minutes
+
+PDF compilation works automatically on Streamlit Cloud via the TeX Live packages in `packages.txt`. Users download files via the in-browser buttons; local folder saving is disabled on the web.
+
+---
+
 ## Two-App Workflow (Alternative)
 
 If you prefer a split workflow:
@@ -172,9 +196,9 @@ App 1 saves the analysis to `.tmp/last_analysis.json`. App 2 picks it up automat
 ## Troubleshooting
 
 **PDF compilation failed**
-- Confirm `pdflatex` is on your PATH: run `pdflatex --version` in a terminal
-- MiKTeX auto-downloads missing packages on first compile — requires internet access
-- The `.tex` source is always saved even if PDF compilation fails
+- **Local:** Confirm `pdflatex` is on your PATH: run `pdflatex --version` in a terminal
+- **Streamlit Cloud:** ensure `packages.txt` contains `texlive-latex-base`, `texlive-fonts-recommended`, `texlive-latex-extra`
+- The `.tex` source is always saved/downloadable even if PDF compilation fails
 
 **"OPENAI_API_KEY is not set"**
 - Confirm your `.env` file is in the `JobMatchingApp/` folder (not a parent folder)
