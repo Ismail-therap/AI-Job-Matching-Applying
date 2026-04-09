@@ -395,24 +395,9 @@ def _dimension_chart(dimensions):
 
 # ── Helpers ─────────────────────────────────────────────────────────────────────
 
-def _is_streamlit_cloud() -> bool:
-    """Detect if running on Streamlit Community Cloud."""
-    return os.getenv("STREAMLIT_SHARING_MODE") is not None
-
-
 def _output_folder(safe_company: str) -> Path | None:
-    """Return the local output folder, or None on web deployment."""
-    if _is_streamlit_cloud():
-        return None
-    custom = st.session_state.get("local_save_path", "").strip()
-    base = Path(custom) if custom else Path(__file__).parent / "outputs"
-    folder = base / datetime.now().strftime("%Y-%m-%d") / safe_company
-    try:
-        folder.mkdir(parents=True, exist_ok=True)
-        return folder
-    except Exception as e:
-        st.warning(f"Could not create output folder `{folder}`: {e}\n\nFiles will be available via download buttons only.")
-        return None
+    """Web branch — always returns None (no local saving)."""
+    return None
 
 
 def _save_analysis():
@@ -465,10 +450,7 @@ def main():
     # ── Sidebar: info ────────────────────────────────────────────────────────
     with st.sidebar:
         st.markdown("### ⚙️ Settings")
-        if _is_streamlit_cloud():
-            st.info("Running on web — files are downloaded via the buttons below. Local save is not available.")
-        else:
-            st.info("Set your output folder in the main panel before generating.")
+        st.info("Files are downloaded as a ZIP via the button below.")
 
     # ── Hero header ─────────────────────────────────────────────────────────
     st.markdown("""
@@ -756,46 +738,6 @@ def _show_results(client):
 
         st.write("")
 
-    # ── Output folder picker ─────────────────────────────────────────────────
-    if not st.session_state.package_done and not _is_streamlit_cloud():
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('<div class="card-title"><span class="card-title-dot"></span>Output Folder</div>',
-                    unsafe_allow_html=True)
-        st.caption("Files will be saved as: `<folder> / YYYY-MM-DD / CompanyName /`")
-
-        col_path, col_browse = st.columns([5, 1])
-        with col_path:
-            typed = st.text_input(
-                "Output folder path",
-                value=st.session_state.get("local_save_path", ""),
-                placeholder="Leave blank to use outputs/ inside the app folder",
-                label_visibility="collapsed",
-            )
-            st.session_state["local_save_path"] = typed
-        with col_browse:
-            if st.button("Browse", use_container_width=True, key="btn_browse_folder"):
-                try:
-                    import tkinter as tk
-                    from tkinter import filedialog
-                    root = tk.Tk()
-                    root.withdraw()
-                    root.wm_attributes("-topmost", 1)
-                    chosen = filedialog.askdirectory(title="Select output folder")
-                    root.destroy()
-                    if chosen:
-                        st.session_state["local_save_path"] = chosen.replace("\\", "/")
-                        st.rerun()
-                except Exception as e:
-                    st.warning(f"Browse failed: {e} — type the path manually.")
-
-        current = st.session_state.get("local_save_path", "").strip()
-        preview = current if current else str(Path(__file__).parent / "outputs")
-        st.markdown(
-            f'<p style="font-size:0.78rem;color:#64748b;margin:6px 0 0">Save location: <code>{preview}/YYYY-MM-DD/CompanyName/</code></p>',
-            unsafe_allow_html=True,
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
-
     # ── Apply button ─────────────────────────────────────────────────────────
     if not st.session_state.package_done:
         st.markdown('<div style="margin-top:8px"></div>', unsafe_allow_html=True)
@@ -1030,62 +972,16 @@ def _show_package_results(client):
     st.markdown('<div class="card-title"><span class="card-title-dot"></span>Download Your Application</div>',
                 unsafe_allow_html=True)
 
-    if _is_streamlit_cloud():
-        # ── Web: single ZIP download ─────────────────────────────────────────
-        zip_bytes = _build_zip(paths, safe_company)
-        st.download_button(
-            f"⬇️  Download {safe_company}.zip (Resume + Cover Letter)",
-            data=zip_bytes,
-            file_name=f"{safe_company}.zip",
-            mime="application/zip",
-            use_container_width=True,
-            type="primary",
-        )
-        st.caption("ZIP contains: Resume.pdf · CoverLetter.pdf · Resume.tex · CoverLetter.tex")
-    else:
-        # ── Local: individual download buttons + saved path ──────────────────
-        if folder:
-            st.markdown(f'<p style="font-size:0.8rem;color:#64748b;margin:0 0 14px">Saved to: <code>{folder}</code></p>',
-                        unsafe_allow_html=True)
-
-        col_r, col_c = st.columns(2)
-        with col_r:
-            st.markdown("""<div class="dl-card">
-                <div class="dl-card-icon">📄</div>
-                <div class="dl-card-title">Tailored Resume</div>
-                <div class="dl-card-sub">Keywords injected · PDF</div>
-            </div>""", unsafe_allow_html=True)
-            st.write("")
-            if "resume_pdf_bytes" in paths:
-                st.download_button(
-                    "⬇️  Download Resume (PDF)",
-                    data=paths["resume_pdf_bytes"],
-                    file_name="Resume.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                    type="primary",
-                )
-            else:
-                st.error("Resume PDF failed — .tex source saved.")
-
-        with col_c:
-            st.markdown("""<div class="dl-card">
-                <div class="dl-card-icon">✉️</div>
-                <div class="dl-card-title">Cover Letter</div>
-                <div class="dl-card-sub">AI-tailored · PDF</div>
-            </div>""", unsafe_allow_html=True)
-            st.write("")
-            if "cover_pdf_bytes" in paths:
-                st.download_button(
-                    "⬇️  Download Cover Letter (PDF)",
-                    data=paths["cover_pdf_bytes"],
-                    file_name="CoverLetter.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                    type="primary",
-                )
-            else:
-                st.error("Cover letter PDF failed — .tex source saved.")
+    zip_bytes = _build_zip(paths, safe_company)
+    st.download_button(
+        f"⬇️  Download {safe_company}.zip (Resume + Cover Letter)",
+        data=zip_bytes,
+        file_name=f"{safe_company}.zip",
+        mime="application/zip",
+        use_container_width=True,
+        type="primary",
+    )
+    st.caption("ZIP contains: Resume.pdf · CoverLetter.pdf · Resume.tex · CoverLetter.tex")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
