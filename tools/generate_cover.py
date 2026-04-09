@@ -355,3 +355,126 @@ def _minimal_preamble() -> str:
         r"\hypersetup{colorlinks=true, urlcolor=blue}" + "\n"
         r"\pagestyle{empty}"
     )
+
+
+def refine(
+    cover_tex_out: str,
+    feedback: str,
+    jd_text: str,
+    meta: dict,
+    resume_plain: str,
+    client: openai.OpenAI,
+) -> tuple[str, list[str]]:
+    """Revise an existing cover letter based on user feedback.
+
+    Args:
+        cover_tex_out: The full .tex string from the previous generation.
+        feedback:      Plain-text instructions from the user describing changes.
+        jd_text:       Original job description (for context).
+        meta:          {company_name, role_title, safe_company}.
+        resume_plain:  Plain-text resume (for context).
+        client:        Initialized OpenAI client.
+
+    Returns:
+        (new_cover_tex, warnings)
+    """
+    warnings: list[str] = []
+    company = meta.get("company_name", "the company")
+    role = meta.get("role_title", "the position")
+
+    # Extract preamble and existing body from the prior output
+    preamble = _extract_preamble(cover_tex_out)
+    if not preamble:
+        preamble = _minimal_preamble()
+
+    # Extract the body between \begin{document} and \end{document}
+    body_match = re.search(
+        r"\\begin\{document\}(.*?)\\end\{document\}",
+        cover_tex_out,
+        re.DOTALL,
+    )
+    existing_body = body_match.group(1).strip() if body_match else cover_tex_out
+
+    exp_rule = _experience_guidance(role, jd_text)
+    candidate_name = _extract_candidate_name(cover_tex_out)
+    name_instruction = (
+        f"- The sign-off name is: {candidate_name}. "
+        f"End the letter with: \\noindent Sincerely,\\\\[8pt]\\textbf{{{candidate_name}}}"
+        if candidate_name
+        else "- End with: \\noindent Sincerely,\\\\[8pt]\\textbf{{[Your Name]}}"
+    )
+
+    system = (
+        "You are a senior professional revising a cover letter in first person on behalf of the candidate.\n\n"
+        "Structure (exactly 3 paragraphs, each wrapped in \\noindent, separated by \\vspace{8pt}):\n\n"
+        "  Para 1 — Opening: name the role, express genuine interest, and state one specific reason "
+        "this candidate is a strong fit — grounded in a real credential or achievement.\n\n"
+        "  Para 2 — Strength narrative: Write 3–4 sentences that naturally showcase the candidate's "
+        "most relevant capabilities and accomplishments. Internally, use the job description to know "
+        "what matters most to this employer — but do NOT quote, list, or echo job requirements. "
+        "Instead, write confident prose about what the candidate has actually done, using concrete "
+        "details (tools, outcomes, scale, impact).\n\n"
+        "  Para 3 — Closing: one confident sentence inviting next steps, thank the reader.\n\n"
+        "Formatting rules:\n"
+        "- Output ONLY raw LaTeX for the document body (no \\documentclass, no \\begin{document}).\n"
+        "- Start with a date line (\\noindent\\today), then \\vspace{12pt}, then salutation "
+        "(\\noindent Dear Hiring Manager,).\n"
+        "- Use \\noindent before each paragraph. Separate blocks with \\vspace{8pt}.\n"
+        f"- {name_instruction}\n"
+        "- Do NOT use bullet points, lists, or tables.\n"
+        "- Keep total word count under 320 words.\n"
+        "- CRITICAL: escape all LaTeX special characters in plain text — "
+        "dollar amounts must use \\$ (e.g. \\$20,000 not $20,000), "
+        "percent must use \\%, ampersand must use \\&, "
+        "hash must use \\#. Unescaped $ will break the PDF.\n"
+        "- No markdown, no code fences, no explanation — output LaTeX only."
+        + exp_rule
+    )
+
+    user = (
+        f"Company: {company}\n"
+        f"Role: {role}\n\n"
+        f"Job Description:\n{jd_text[:2500]}\n\n"
+        f"Candidate Resume (plain text):\n{resume_plain[:2500]}\n\n"
+        f"Current cover letter body:\n{existing_body}\n\n"
+        f"User feedback (changes requested):\n{feedback}\n\n"
+        "Revise the cover letter body incorporating the above feedback. "
+        "Keep the same 3-paragraph structure and LaTeX formatting rules."
+    )
+
+    new_body = None
+    for attempt in range(2):
+        try:
+            resp = client.chat.completions.create(
+                model=MODEL,
+                temperature=TEMPERATURE,
+                max_tokens=800,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            )
+            cost_tracker.record(MODEL, resp.usage.prompt_tokens, resp.usage.completion_tokens, "Cover letter (refined)")
+            body = (resp.choices[0].message.content or "").strip()
+            body = re.sub(r"^```[a-z]*\n?", "", body, flags=re.MULTILINE)
+            body = re.sub(r"\n?```$", "", body).strip()
+            new_body = _sanitize_body(body)
+            log.info("Cover letter refined.")
+            break
+        except openai.RateLimitError:
+            log.warning("Rate limit — waiting 30s")
+            time.sleep(30)
+        except openai.APIError as e:
+            log.error(f"Cover letter refinement failed: {e}")
+            break
+
+    if new_body is None:
+        warnings.append("Cover letter refinement failed — keeping previous version.")
+        new_body = existing_body
+
+    result = preamble + "\n\\begin{document}\n\n" + new_body + "\n\n\\end{document}\n"
+
+    if not _is_valid_latex(result):
+        warnings.append("Cover letter LaTeX validation warning: missing document tags.")
+
+    return result, warnings
