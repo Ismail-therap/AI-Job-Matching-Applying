@@ -459,21 +459,13 @@ def main():
     client = get_client()
     model  = get_model()
 
-    # ── Sidebar: settings ────────────────────────────────────────────────────
+    # ── Sidebar: info ────────────────────────────────────────────────────────
     with st.sidebar:
         st.markdown("### ⚙️ Settings")
         if _is_streamlit_cloud():
             st.info("Running on web — files are downloaded via the buttons below. Local save is not available.")
         else:
-            st.markdown("**Local Save Folder**")
-            st.caption("Where to save output files on your machine. Leave blank to use `outputs/` in the app folder.")
-            local_path = st.text_input(
-                "Save path",
-                value=st.session_state.get("local_save_path", ""),
-                placeholder="e.g. C:/Users/You/Documents/JobApps",
-                label_visibility="collapsed",
-            )
-            st.session_state["local_save_path"] = local_path
+            st.info("Set your output folder in the main panel before generating.")
 
     # ── Hero header ─────────────────────────────────────────────────────────
     st.markdown("""
@@ -760,6 +752,47 @@ def _show_results(client):
             st.warning("No keywords selected — keyword injection will be skipped.")
 
         st.write("")
+
+    # ── Output folder picker ─────────────────────────────────────────────────
+    if not st.session_state.package_done and not _is_streamlit_cloud():
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<div class="card-title"><span class="card-title-dot"></span>Output Folder</div>',
+                    unsafe_allow_html=True)
+        st.caption("Files will be saved as: `<folder> / YYYY-MM-DD / CompanyName /`")
+
+        col_path, col_browse = st.columns([5, 1])
+        with col_path:
+            typed = st.text_input(
+                "Output folder path",
+                value=st.session_state.get("local_save_path", ""),
+                placeholder="Leave blank to use outputs/ inside the app folder",
+                label_visibility="collapsed",
+                key="local_save_path_input",
+            )
+            st.session_state["local_save_path"] = typed
+        with col_browse:
+            if st.button("Browse", use_container_width=True, key="btn_browse_folder"):
+                try:
+                    import tkinter as tk
+                    from tkinter import filedialog
+                    root = tk.Tk()
+                    root.withdraw()
+                    root.wm_attributes("-topmost", 1)
+                    chosen = filedialog.askdirectory(title="Select output folder")
+                    root.destroy()
+                    if chosen:
+                        st.session_state["local_save_path"] = chosen
+                        st.rerun()
+                except Exception:
+                    st.warning("Browse not available — type the path manually.")
+
+        current = st.session_state.get("local_save_path", "").strip()
+        preview = current if current else str(Path("outputs").resolve())
+        st.markdown(
+            f'<p style="font-size:0.78rem;color:#64748b;margin:6px 0 0">Save location: <code>{preview}/YYYY-MM-DD/CompanyName/</code></p>',
+            unsafe_allow_html=True,
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
 
     # ── Apply button ─────────────────────────────────────────────────────────
     if not st.session_state.package_done:
