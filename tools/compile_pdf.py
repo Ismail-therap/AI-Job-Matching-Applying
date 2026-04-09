@@ -1,12 +1,12 @@
 """
-tools/compile_pdf.py — LaTeX → PDF via local MiKTeX
+tools/compile_pdf.py — LaTeX → PDF via pdflatex (TeX Live or MiKTeX)
 
-Uses pdflatex with -enable-installer so MiKTeX auto-downloads any missing
-packages on first run. Runs pdflatex twice to resolve cross-references.
+Runs pdflatex twice to resolve cross-references.
 
 Requirements:
-  - MiKTeX installed and `pdflatex` on PATH
-  - Internet connection on first run (for package downloads)
+  - pdflatex on PATH (TeX Live on Linux/Streamlit Cloud, MiKTeX on Windows)
+  - On Streamlit Cloud: add texlive-latex-base, texlive-fonts-recommended,
+    texlive-latex-extra to packages.txt
 """
 
 from __future__ import annotations
@@ -96,15 +96,13 @@ def _run_pdflatex(tex_path: Path, work_dir: Path) -> tuple[str, bool]:
     cmd = [
         "pdflatex",
         "-interaction=nonstopmode",   # don't pause on errors
-        "-enable-installer",           # MiKTeX: auto-install missing packages
         f"-output-directory={out_dir}",
         tex_file,
     ]
 
     combined_log = ""
     for run in (1, 2):  # two passes for cross-references / TOC
-        # Pass 1 gets a longer timeout to allow MiKTeX to download missing packages
-        timeout = 300 if run == 1 else 120
+        timeout = 120
         try:
             result = subprocess.run(
                 cmd,

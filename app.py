@@ -393,10 +393,23 @@ def _dimension_chart(dimensions):
 
 # ── Helpers ─────────────────────────────────────────────────────────────────────
 
-def _output_folder(safe_company: str) -> Path:
-    folder = Path("outputs") / datetime.now().strftime("%Y-%m-%d") / safe_company
-    folder.mkdir(parents=True, exist_ok=True)
-    return folder
+def _is_streamlit_cloud() -> bool:
+    """Detect if running on Streamlit Community Cloud."""
+    return os.getenv("STREAMLIT_SHARING_MODE") is not None
+
+
+def _output_folder(safe_company: str) -> Path | None:
+    """Return the local output folder, or None if no local save path is configured."""
+    custom = st.session_state.get("local_save_path", "").strip()
+    if _is_streamlit_cloud():
+        return None  # web deployment — no local filesystem access for users
+    base = Path(custom) if custom else Path("outputs")
+    folder = base / datetime.now().strftime("%Y-%m-%d") / safe_company
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        return folder
+    except Exception:
+        return None
 
 
 def _save_analysis():
@@ -445,6 +458,22 @@ def main():
     _init_state()
     client = get_client()
     model  = get_model()
+
+    # ── Sidebar: settings ────────────────────────────────────────────────────
+    with st.sidebar:
+        st.markdown("### ⚙️ Settings")
+        if _is_streamlit_cloud():
+            st.info("Running on web — files are downloaded via the buttons below. Local save is not available.")
+        else:
+            st.markdown("**Local Save Folder**")
+            st.caption("Where to save output files on your machine. Leave blank to use `outputs/` in the app folder.")
+            local_path = st.text_input(
+                "Save path",
+                value=st.session_state.get("local_save_path", ""),
+                placeholder="e.g. C:/Users/You/Documents/JobApps",
+                label_visibility="collapsed",
+            )
+            st.session_state["local_save_path"] = local_path
 
     # ── Hero header ─────────────────────────────────────────────────────────
     st.markdown("""
@@ -858,24 +887,30 @@ def _run_package(client):
         output_paths = {}
         folder = _output_folder(safe_company)
 
-        (folder / "Resume.tex").write_text(tailored_tex, encoding="utf-8")
-        (folder / "CoverLetter.tex").write_text(cover_tex_out, encoding="utf-8")
-
+        # Always keep bytes for download buttons
         if resume_pdf_bytes:
-            p = folder / "Resume.pdf"
-            p.write_bytes(resume_pdf_bytes)
-            output_paths["resume_pdf"]       = str(p)
             output_paths["resume_pdf_bytes"] = resume_pdf_bytes
-
         if cover_pdf_bytes:
-            p = folder / "CoverLetter.pdf"
-            p.write_bytes(cover_pdf_bytes)
-            output_paths["cover_pdf"]       = str(p)
             output_paths["cover_pdf_bytes"] = cover_pdf_bytes
 
-        output_paths["folder"] = str(folder)
         pdf_count = (1 if resume_pdf_bytes else 0) + (1 if cover_pdf_bytes else 0)
-        st.write(f"✅ Saved {pdf_count}/2 PDF(s) + .tex sources → `{folder}`")
+
+        if folder is not None:
+            # Local save
+            (folder / "Resume.tex").write_text(tailored_tex, encoding="utf-8")
+            (folder / "CoverLetter.tex").write_text(cover_tex_out, encoding="utf-8")
+            if resume_pdf_bytes:
+                p = folder / "Resume.pdf"
+                p.write_bytes(resume_pdf_bytes)
+                output_paths["resume_pdf"] = str(p)
+            if cover_pdf_bytes:
+                p = folder / "CoverLetter.pdf"
+                p.write_bytes(cover_pdf_bytes)
+                output_paths["cover_pdf"] = str(p)
+            output_paths["folder"] = str(folder)
+            st.write(f"✅ {pdf_count}/2 PDF(s) + .tex files saved → `{folder}`")
+        else:
+            st.write(f"✅ {pdf_count}/2 PDF(s) ready — use the download buttons below.")
 
         if pdf_count == 2:
             pkg_status.update(label="✅ Application package ready!", state="complete", expanded=False)
@@ -917,10 +952,11 @@ def _refine_cover(client):
         )
 
         if cover_pdf_bytes:
-            folder = _output_folder(safe_company)
-            (folder / "CoverLetter.pdf").write_bytes(cover_pdf_bytes)
-            (folder / "CoverLetter.tex").write_text(new_tex, encoding="utf-8")
             st.session_state.output_paths["cover_pdf_bytes"] = cover_pdf_bytes
+            folder = _output_folder(safe_company)
+            if folder is not None:
+                (folder / "CoverLetter.pdf").write_bytes(cover_pdf_bytes)
+                (folder / "CoverLetter.tex").write_text(new_tex, encoding="utf-8")
             st.session_state.refine_status = "success"
         else:
             st.session_state.refine_status = "error"
